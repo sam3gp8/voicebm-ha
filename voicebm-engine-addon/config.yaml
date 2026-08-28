@@ -1,0 +1,155 @@
+---
+name: VoiceBM
+version: "3.10.0"
+slug: voicebm
+description: Local, self-contained voice biometrics — identify speakers and publish identity signals via MQTT
+url: https://github.com/cybericebyte/VoiceBM
+arch:
+  - amd64
+  - aarch64
+init: false
+hassio_api: true
+hassio_role: default
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:account-voice
+panel_title: VoiceBM
+map:
+  - config:rw
+  - share:rw
+watchdog: http://[HOST]:9090/
+# GPU access on the HAOS GPU-AI host (github.com/sam3gp8/haos-gpu-ai).
+# That OS activates the GPU for containers via a conditional
+# "default-runtime": "nvidia" (promoted by gpu-autodetect when an NVIDIA GPU
+# is present) plus the NVIDIA runtime hook — which fires when a container sets
+# NVIDIA_VISIBLE_DEVICES (set in the Dockerfile ENV). Containers reach the GPU
+# via full_access (the whole host /dev tree), NOT an explicit /dev/nvidia*
+# devices: list — a named node would fail to start on an Intel/AMD host and is
+# the brittle path that OS's README explicitly warns against. This mirrors the
+# proven addon-ollama pattern on that image.
+#
+# full_access is only consulted when the GPU build is used AND you set
+# active.device: gpu; on a CPU-only host or stock HAOS it's harmless (the
+# engine falls back to CPU). Trade-off: full_access is broad — fine for a
+# single-tenant homelab appliance, tighten if you run untrusted add-ons.
+full_access: true
+services:
+  - mqtt:want
+ports:
+  5000/tcp: null
+  8000/tcp: 8000
+  8005/tcp: 8005
+  9090/tcp: 9090
+  10300/tcp: null
+  10400/tcp: 10400
+ports_description:
+  5000/tcp: VoiceBM dashboard (primary access is the sidebar via Ingress; map this only if you also want direct port access)
+  8000/tcp: Raw WAV recordings HTTP server (per-node segments)
+  8005/tcp: STT Bridge — OpenAI-compatible /v1/audio/transcriptions endpoint
+  9090/tcp: Audio server (serves pending/enrollment clips to Home Assistant)
+  10400/tcp: Wyoming STT proxy — point Assist here in external_whisper mode (Whisper text + VoiceBM identity)
+options:
+  network:
+    public_host: ""
+  components:
+    active: true
+    passive: false
+    ambient: false
+    emote: false
+  mqtt:
+    use_addon_mqtt_service: true
+    broker: ""
+    port: 1883
+    username: ""
+    password: ""
+  thresholds:
+    passive: 0.22
+    active: 0.50
+    ambient_context: 0.18
+    ambient_margin: 0.05
+  voicebm:
+    gallery_max: 75
+    active_lead_trim_ms: 0
+    inject_identity: true
+    transcript_preferred: true
+  active:
+    model_en: nemo-parakeet-tdt-0.6b-v2 (default — fast + accurate English voice commands, ideal for JARVIS)
+    model_multilingual: none (skip — English-only household)
+    quantization: none (full precision — best accuracy)
+    device: cpu (default — works everywhere)
+  stt:
+    mode: integration
+    whisper_uri: tcp://a0d7b954-whisper:10300
+    proxy_port: 10400
+    identity_inject: false
+    identity_wait_ms: 1200
+  auto_enroll:
+    enabled: false
+    min_samples: 6
+    min_cohesion: 0.55
+    interval_s: 300
+    name_prefix: Speaker
+  jarvis:
+    enroll_bridge: false
+    enroll_topic: voicebm/jarvis/enroll_current
+  nodes:
+    - node_id: ""
+      friendly_name: ""
+      rtsp_url: ""
+      audio_filter: ""
+      recorder_enabled: false
+      ambient_enabled: false
+  log_level: info
+schema:
+  network:
+    public_host: str
+  components:
+    active: bool
+    passive: bool
+    ambient: bool
+    emote: bool
+  mqtt:
+    use_addon_mqtt_service: bool
+    broker: str
+    port: port
+    username: str
+    password: password
+  thresholds:
+    passive: float
+    active: float
+    ambient_context: float
+    ambient_margin: float
+  voicebm:
+    gallery_max: int(1,)
+    active_lead_trim_ms: int(0,)
+    inject_identity: bool
+    transcript_preferred: bool
+  active:
+    model_en: list(nemo-parakeet-tdt-0.6b-v2 (default — fast + accurate English voice commands, ideal for JARVIS)|nemo-parakeet-ctc-0.6b (lightest English Parakeet — low-power CPU boxes)|nemo-parakeet-rnnt-0.6b (English Parakeet RNN-T — alternative decoder)|whisper-base (Whisper Base — accent + noise tolerant English)|onnx-community/whisper-tiny (smallest Whisper — very fast, lower accuracy)|onnx-community/whisper-base (Whisper Base, HF export)|onnx-community/whisper-small (more accurate Whisper — slower on CPU)|onnx-community/whisper-large-v3-turbo (best accuracy — wants the GPU))
+    model_multilingual: list(none (skip — English-only household)|nemo-parakeet-tdt-0.6b-v3 (multilingual Parakeet — fast, best all-round non-English)|nemo-canary-1b-v2 (Canary 1B — high-accuracy multilingual, heavy)|istupakov/canary-180m-flash-onnx (small multilingual Canary — light)|istupakov/canary-1b-flash-onnx (Canary 1B Flash — multilingual, faster decoder)|gigaam-multilingual-ctc (GigaAM multilingual CTC)|gigaam-multilingual-large-ctc (GigaAM multilingual Large — more accurate)|onnx-community/whisper-large-v3-turbo (Whisper multilingual — wants the GPU)|gigaam-v2-ctc (Russian — GigaAM v2 CTC)|gigaam-v2-rnnt (Russian — GigaAM v2 RNN-T)|gigaam-v3-ctc (Russian — GigaAM v3 CTC)|gigaam-v3-rnnt (Russian — GigaAM v3 RNN-T)|gigaam-v3-e2e-ctc (Russian — GigaAM v3 E2E CTC)|gigaam-v3-e2e-rnnt (Russian — GigaAM v3 E2E RNN-T)|nemo-fastconformer-ru-ctc (Russian — FastConformer CTC)|nemo-fastconformer-ru-rnnt (Russian — FastConformer RNN-T)|alphacep/vosk-model-ru (Russian — Vosk 0.54)|alphacep/vosk-model-small-ru (Russian — Vosk small, light)|t-tech/t-one (Russian — T-one CTC))
+    quantization: list(none (full precision — best accuracy)|int8 (quantized — smaller + faster, slight accuracy cost))
+    device: list(cpu (default — works everywhere)|gpu (CUDA — needs ENABLE_GPU image build, haos-gpu-ai host)|gpu-trt (TensorRT — needs ENABLE_GPU build + TensorRT libs))
+  stt:
+    mode: list(internal|external_whisper|integration)
+    whisper_uri: str
+    proxy_port: port
+    identity_inject: bool
+    identity_wait_ms: int(0,)
+  auto_enroll:
+    enabled: bool
+    min_samples: int(2,)
+    min_cohesion: float(0,1)
+    interval_s: int(30,)
+    name_prefix: str
+  jarvis:
+    enroll_bridge: bool
+    enroll_topic: str
+  nodes:
+    - node_id: str
+      friendly_name: str
+      rtsp_url: str
+      audio_filter: str
+      recorder_enabled: bool
+      ambient_enabled: bool
+  log_level: list(debug|info|warning|error)

@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "VoiceBM",
+        "description": "VoiceBM adds local speaker identity to your voice pipeline. Pick the speech-to-text engine it should transcribe with \u2014 normally your existing Whisper. VoiceBM identifies the speaker on the same audio and publishes it for JARVIS / Ollama, while your Whisper does the transcription.",
+        "data": {
+          "backend_stt_entity": "Transcription engine (your Whisper)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "VoiceBM is already set up.",
+      "no_backend_stt": "No speech-to-text engine was found to transcribe with. Set up your Whisper add-on/integration first, then add VoiceBM."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "VoiceBM options",
+        "data": {
+          "backend_stt_entity": "Transcription engine (your Whisper)",
+          "identity_inject": "Inject the identified name into the transcript",
+          "identity_wait_ms": "Max wait for the identity verdict (ms, only if injecting)",
+          "share_dir": "Shared audio folder (both HA and the VoiceBM add-on must see this)",
+          "gallery_dir": "Speaker gallery folder (where the engine stores enrolled voices; default /share/voicebm)"
+        }
+      }
+    }
+  },
+  "issues": {
+    "engine_addon_missing": {
+      "title": "VoiceBM engine add-on not installed",
+      "description": "Speaker identity needs the VoiceBM engine add-on (it runs the voice-biometrics ML that cannot run inside Home Assistant Core). Copy the package's addon-voicebm folder into /addons on your system, then Settings > Add-ons > Add-on Store > (menu) > Check for updates, and install VoiceBM from Local add-ons. The integration will configure and start it automatically. Transcription keeps working in the meantime."
+    }
+  }
+}

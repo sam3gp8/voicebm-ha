@@ -1,0 +1,29 @@
+configuration:
+  network:
+    name: Network
+    description: How other devices reach this add-on
+  components:
+    name: Components
+    description: Which VoiceBM pillars to run
+  mqtt:
+    name: MQTT
+    description: Broker connection
+  thresholds:
+    name: Match thresholds
+    description: Cosine-similarity thresholds per pipeline
+  voicebm:
+    name: Engine tunables
+    description: Gallery cap, lead trim, injection switches
+  active:
+    name: Built-in speech-to-text (Active pipeline)
+    description: >-
+      Only used when stt.mode = internal. In the default integration mode your
+      Whisper add-on transcribes and these are ignored. Models auto-download on
+      first start (into /data/wyoming-models); the text in parentheses is the
+      example use for each model and is stripped automatically.
+  nodes:
+    name: Nodes
+    description: RTSP audio sources for Passive/Ambient
+  log_level:
+    name: Log level
+    description: Add-on log verbosity

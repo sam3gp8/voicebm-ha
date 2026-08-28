@@ -1,0 +1,22 @@
+{
+  "domain": "voicebm",
+  "name": "VoiceBM (Whisper + Speaker Identity)",
+  "codeowners": [
+    "@sam3gp8"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "stt",
+    "mqtt",
+    "http",
+    "frontend",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/sam3gp8/voicebm-ha",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/sam3gp8/voicebm-ha/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}
