@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.10.1 — integration-first naming
+- Metadata only, no behavior change. The add-on is now named **VoiceBM engine**
+  (was "VoiceBM") with a description and sidebar title that identify it as the
+  engine backend for the VoiceBM Home Assistant integration, matching the
+  repo's integration-first direction (see `DIRECTION.md`). The `slug` is
+  unchanged (`voicebm` → `local_voicebm`), so existing installs and the
+  integration's add-on lookup are unaffected.
+
 ## 3.10.0 — delete individual voice samples
 - New per-sample management: a small `sample_manager` service (s6 longrun) lists
   and deletes INDIVIDUAL voice samples from an enrolled speaker, so a sample

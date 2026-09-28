@@ -1,8 +1,8 @@
 ---
-name: VoiceBM
-version: "3.10.0"
+name: VoiceBM engine
+version: "3.10.1"
 slug: voicebm
-description: Local, self-contained voice biometrics — identify speakers and publish identity signals via MQTT
+description: Engine backend for the VoiceBM Home Assistant integration — local voice biometrics that identify speakers and publish identity signals via MQTT
 url: https://github.com/cybericebyte/VoiceBM
 arch:
   - amd64
@@ -14,7 +14,7 @@ homeassistant_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:account-voice
-panel_title: VoiceBM
+panel_title: VoiceBM engine
 map:
   - config:rw
   - share:rw

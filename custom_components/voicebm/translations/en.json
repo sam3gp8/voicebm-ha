@@ -31,7 +31,7 @@
   "issues": {
     "engine_addon_missing": {
       "title": "VoiceBM engine add-on not installed",
-      "description": "Speaker identity needs the VoiceBM engine add-on (it runs the voice-biometrics ML that cannot run inside Home Assistant Core). Copy the package's addon-voicebm folder into /addons on your system, then Settings > Add-ons > Add-on Store > (menu) > Check for updates, and install VoiceBM from Local add-ons. The integration will configure and start it automatically. Transcription keeps working in the meantime."
+      "description": "Speaker identity needs the VoiceBM engine add-on (it runs the voice-biometrics ML that cannot run inside Home Assistant Core). Copy the package's addon-voicebm folder into /addons on your system, then Settings > Add-ons > Add-on Store > (menu) > Check for updates, and install VoiceBM engine from Local add-ons. The integration will configure and start it automatically. Transcription keeps working in the meantime."
     }
   }
 }

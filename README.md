@@ -1,31 +1,42 @@
-<!-- Release v1.0.0 · integration 1.0.0 · engine add-on 3.10.0 -->
-# voicebm-ha — VoiceBM for Home Assistant (HACS integration + engine add-on)
+<!-- Release v1.0.0 · integration 1.0.0 · engine add-on 3.10.1 -->
+# voicebm-ha — the VoiceBM integration for Home Assistant
+
+**A Home Assistant integration that adds speaker identity to your voice
+pipeline — who is speaking, on the same audio your existing Whisper already
+transcribes.** It installs via HACS and is backed by an engine add-on that runs
+the voice biometrics.
 
 > **Built on [VoiceBM](https://github.com/cybericebyte/VoiceBM) by
 > [@cybericebyte](https://github.com/cybericebyte).** All of the voice-biometrics
 > engine — speaker embeddings, gallery matching, enrollment, the whole identity
 > core — is @cybericebyte's original work, released under the MIT License
 > (© 2025 cybericebyte). This project does **not** claim that work. It is a
-> standalone Home Assistant packaging of it: a native HA **integration** and a
-> headless **engine add-on**, so VoiceBM installs cleanly via HACS and runs as a
-> first-class part of a Home Assistant voice pipeline. Both copyright notices are
-> retained in [`LICENSE`](LICENSE), as MIT requires. Please star and support the
-> [original project](https://github.com/cybericebyte/VoiceBM).
+> standalone Home Assistant packaging of it, so VoiceBM installs cleanly via HACS
+> and runs as a first-class part of a Home Assistant voice pipeline. Both
+> copyright notices are retained in [`LICENSE`](LICENSE), as MIT requires. Please
+> star and support the [original project](https://github.com/cybericebyte/VoiceBM).
 
-## What this fork adds
+See [`DIRECTION.md`](DIRECTION.md) for why this repo is integration-first and
+where it's headed.
 
-Upstream VoiceBM is a host-installed engine. This fork packages it for Home
-Assistant OS as two pieces that work together:
+## The integration, and the engine behind it
 
-- **`custom_components/voicebm/`** — a native HA integration (HACS-installable).
+The product is the **integration**. It's what you install, configure, and see:
+
+- **`custom_components/voicebm/`** — the **HA integration** (HACS-installable).
   It registers as a Speech-to-text engine that transcribes through your existing
   Whisper and adds speaker identity on the same audio, and it provides a native
   **VoiceBM Speakers** sidebar panel (rename / merge / delete / enroll), served
   through Home Assistant so it works over HTTPS with no separate port.
-- **`voicebm-engine-addon/`** — the headless engine add-on. It runs the original
-  VoiceBM biometrics (the ML needs a glibc ONNX runtime, which can't run inside
-  HA Core's Alpine environment — hence a separate container). You install it
-  once; the integration configures and starts it for you.
+
+Behind it runs one dependency:
+
+- **`voicebm-engine-addon/`** — the **engine add-on**. It runs the original
+  VoiceBM biometrics; it lives in its own container because the ML needs a glibc
+  ONNX runtime, which can't run inside HA Core's Alpine environment. You install
+  it once, and the integration configures and starts it for you (it self-heals
+  the add-on into `integration` mode over the Supervisor, the same companion
+  pattern Z-Wave JS and Matter use).
 
 The two communicate over MQTT + a shared `/share/voicebm` folder. Transcription
 never depends on identity: if the engine is down you still get Whisper's
@@ -33,17 +44,17 @@ transcript, so adding VoiceBM as your STT engine can't break your voice pipeline
 
 ## Install
 
-### 1. Integration (HACS)
+### 1. The integration (HACS)
 1. HACS → Integrations → ⋮ → **Custom repositories** → add
    `https://github.com/sam3gp8/voicebm-ha`, category **Integration**.
 2. Install **VoiceBM (Whisper + Speaker Identity)** → **restart Home Assistant**.
 
 (Or copy `custom_components/voicebm/` into `config/custom_components/` manually.)
 
-### 2. Engine add-on
+### 2. The engine add-on it needs
 Copy the **`voicebm-engine-addon/`** folder into `/addons/` on your HAOS box so
 `/addons/voicebm/config.yaml` exists, then Settings → Add-ons → Add-on Store →
-⋮ → **Check for updates** → install **VoiceBM** from *Local add-ons*. The folder
+⋮ → **Check for updates** → install **VoiceBM engine** from *Local add-ons*. The folder
 is flat (`config.yaml`, `Dockerfile`, `rootfs.tar.gz`, docs) so any copy method
 works. First start builds the image on-device (needs internet, a few minutes).
 
