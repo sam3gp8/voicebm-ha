@@ -10,7 +10,10 @@
 - New `.github/workflows/validate.yml`: `hassfest`, `hacs/action`
   (`category: integration`), and a panel JS syntax check, on push / PR / weekly.
   The HACS `brands` check is ignored pending the `home-assistant/brands`
-  submission (see `DIRECTION.md`); everything else is validated and green.
+  submission (see `DIRECTION.md`); everything else is validated.
+- Normalized `LICENSE` to the standard MIT text (both copyright notices
+  retained) so GitHub identifies it as MIT — the HACS license check needs a
+  recognized SPDX license; the explanatory attribution lives in the README.
 
 ## [1.0.1] — integration-first direction
 
