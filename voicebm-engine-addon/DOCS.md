@@ -119,15 +119,20 @@ with `ambient_enabled: true`, same as upstream.
 ## Access and ports
 
 In the default integration setup, the UI is the integration's native **VoiceBM
-Speakers** panel — the add-on's own Flask dashboard and its Ingress proxy idle.
-Home Assistant talks to VoiceBM entirely over MQTT: the **Voice Biometrics**
-device appears automatically under Settings → Devices & Services → MQTT once the
-add-on is running.
+Speakers** panel — the add-on's own Flask dashboard and its Ingress proxy idle,
+and the add-on **hides its own sidebar entry** so there's no dead duplicate to
+click (it sets `ingress_panel` off over the Supervisor on start; the Ingress
+endpoint itself stays reachable from the add-on's info page). Home Assistant
+talks to VoiceBM entirely over MQTT: the **Voice Biometrics** device appears
+automatically under Settings → Devices & Services → MQTT once the add-on is
+running.
 
-The add-on's dashboard can still run behind **Home Assistant Ingress** (sidebar
-entry, authenticated by HA, no open port) when you use a standalone mode; a
-small built-in reverse proxy keeps the upstream dashboard's absolute API paths
-working under the Ingress prefix without modifying upstream code.
+In a standalone mode the add-on's dashboard runs behind **Home Assistant
+Ingress** (sidebar entry, authenticated by HA, no open port) and the add-on
+shows its sidebar entry again; a small built-in reverse proxy keeps the upstream
+dashboard's absolute API paths working under the Ingress prefix without
+modifying upstream code. The add-on re-evaluates this on every start, so
+switching modes flips the sidebar entry automatically.
 
 A few services stay on mapped ports because external tools may need them
 directly:
