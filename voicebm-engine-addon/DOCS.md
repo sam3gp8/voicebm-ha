@@ -1,13 +1,46 @@
-# VoiceBM — Home Assistant Add-on
+# VoiceBM engine — Home Assistant add-on
 
-This packages upstream [cybericebyte/VoiceBM](https://github.com/cybericebyte/VoiceBM)
-(a systemd-service-based, host-installed voice biometrics engine) into a
-single Home Assistant add-on container, built and run entirely on **Home
-Assistant OS** — no separate host, no systemd, no manual Python environment.
-The engine code itself is vendored unmodified; everything install/deploy-
-related (the interactive wizard, `config.json` generation, per-node systemd
-units, and the ASR handler copy step) is replaced with add-on-native
-equivalents that HAOS's Supervisor runs directly.
+This is the **engine backend** for the [VoiceBM Home Assistant
+integration](https://github.com/sam3gp8/voicebm-ha). It packages upstream
+[cybericebyte/VoiceBM](https://github.com/cybericebyte/VoiceBM) (a
+systemd-service-based, host-installed voice biometrics engine) into a single
+Home Assistant add-on container, built and run entirely on **Home Assistant
+OS** — no separate host, no systemd, no manual Python environment. The engine
+code itself is vendored unmodified; everything install/deploy-related (the
+interactive wizard, `config.json` generation, per-node systemd units, and the
+ASR handler copy step) is replaced with add-on-native equivalents that HAOS's
+Supervisor runs directly.
+
+> **You configure and use VoiceBM through the integration, not here.** Install
+> the integration via HACS, install this add-on once, and the integration wires
+> the two together (it even sets this add-on's `stt.mode: integration` and
+> starts it for you over the Supervisor). This page is the engine's reference:
+> read the [repo README](https://github.com/sam3gp8/voicebm-ha) and
+> [`DIRECTION.md`](https://github.com/sam3gp8/voicebm-ha/blob/main/DIRECTION.md)
+> for the integration-first setup.
+
+## Its role: the identity engine behind the integration
+
+In the default architecture (`stt.mode: integration`, the shipped default):
+
+- **The integration is the speech-to-text provider and the UI.** It transcribes
+  through your existing Whisper and provides the native **VoiceBM Speakers**
+  sidebar panel.
+- **This add-on runs as the identity engine only.** Its bundled Wyoming ASR, the
+  STT bridge, the `external_whisper` proxy, the Flask dashboard, and the
+  dashboard's Ingress proxy all **idle** — the integration replaces them. The
+  add-on embeds the audio, matches it against the gallery, and publishes speaker
+  identity.
+- **The two communicate over MQTT + a shared `/share/voicebm` folder.** The
+  integration drops STT audio for the engine to analyze; the engine publishes
+  identity back. Transcription never depends on identity — if the engine is down
+  you still get Whisper's transcript.
+
+You normally never touch `stt.mode`: the integration self-heals it to
+`integration` over the Supervisor. The standalone modes (`internal`,
+`external_whisper`) and the passive/ambient pipelines are documented under
+[Advanced / standalone configurations](#advanced--standalone-configurations)
+below, and are not needed for the default setup.
 
 ## Installing on HAOS
 
@@ -32,12 +65,12 @@ custom/community add-ons. Two ways to get the folder onto your HAOS box:
    `/addons/voicebm-repo/voicebm/config.yaml` exists.
 3. Same as above: Add-on Store → Check for updates → **Local add-ons**.
 
-Either way, click into **VoiceBM**, hit **Install**, and HAOS's Supervisor
-builds the image on-device (Debian base + Python deps + the vendored engine
-— expect several minutes, longer with Ambient/Emote's `torch` pull). Once
-built, set your options under **Configuration** before starting it — at
-minimum `nodes` (if using Passive/Ambient); Active works out of the box
-with its default bundled model.
+Either way, click into **VoiceBM engine**, hit **Install**, and HAOS's
+Supervisor builds the image on-device (Debian base + Python deps + the vendored
+engine — expect several minutes, longer with Ambient/Emote's `torch` pull). In
+the default integration setup you don't need to change any options before
+starting it — the integration configures it. (If you're using the standalone
+Passive/Ambient pipelines, set `nodes` first; see below.)
 
 If you'd rather publish this as a proper GitHub add-on repository (so it
 shows up like any store add-on via **Repositories** instead of `/addons`),
@@ -68,6 +101,12 @@ dashboard, thing engine, node engine, and (if `components.active` is on)
 the STT service, STT bridge, and the bundled Wyoming ASR server itself. A
 daily cleanup loop replaces the upstream `voicebm-cleanup.timer`.
 
+In the default `stt.mode: integration`, the transcription-side processes (the
+bundled Wyoming ASR, the STT bridge, the `external_whisper` proxy) and the Flask
+dashboard + its Ingress proxy idle — the integration provides transcription and
+the UI. The identity-side services (embedding, gallery matching, enrollment,
+audio server) run as usual.
+
 Passive nodes (RTSP audio sources) are handled by one supervisor process
 (`node_supervisor.py`) that starts/restarts the recorder → embedder →
 publisher trio for every node you define with `recorder_enabled: true`,
@@ -77,20 +116,136 @@ node.
 Ambient (audio-event detection) runs as one process across every node
 with `ambient_enabled: true`, same as upstream.
 
-## Requirements this add-on does NOT solve for you
+## Access and ports
 
-- **RTSP audio nodes** (Passive/Ambient only). A node is any device/process
-  serving an RTSP audio stream — not a camera. You still need something
-  producing that stream; VoiceBM just consumes it.
+In the default integration setup, the UI is the integration's native **VoiceBM
+Speakers** panel — the add-on's own Flask dashboard and its Ingress proxy idle.
+Home Assistant talks to VoiceBM entirely over MQTT: the **Voice Biometrics**
+device appears automatically under Settings → Devices & Services → MQTT once the
+add-on is running.
 
-Everything else — MQTT (via the Supervisor's Mosquitto service or your own
-broker), speech-to-text (bundled), and speaker identity (bundled) — runs
-inside this one container. There's nothing else to install or wire up.
+The add-on's dashboard can still run behind **Home Assistant Ingress** (sidebar
+entry, authenticated by HA, no open port) when you use a standalone mode; a
+small built-in reverse proxy keeps the upstream dashboard's absolute API paths
+working under the Ingress prefix without modifying upstream code.
 
-## Speech-to-text is bundled, not external
+A few services stay on mapped ports because external tools may need them
+directly:
 
-Upstream VoiceBM's Active pipeline is designed against a *separately
-installed* Wyoming ONNX ASR container: you'd run
+| Port | What |
+|---|---|
+| 8005 | STT Bridge — OpenAI-compatible `/v1/audio/transcriptions`, for OpenWebUI etc. (idle in integration mode) |
+| 8000 | Raw WAV recordings (per-node segments) |
+| 9090 | Audio server — serves pending/enrollment clips back to Home Assistant |
+
+The dashboard's own port 5000 is unmapped by default (use the sidebar or, in the
+default setup, the integration's panel). If you want direct port access, set
+`5000/tcp` to `5000` in the add-on's Network panel. The bundled ASR's Wyoming
+port (10300) stays loopback-only.
+
+## Storage: browsable in the File Editor
+
+Persistent data is split by how useful it is to you:
+
+- **`/share/voicebm/`** — `config.json`, the enrollment gallery, embeddings,
+  metadata, the pending buffer, auto-enroll state. This is the stuff worth
+  seeing, editing, and backing up, so it lives under `/share` where the
+  **File Editor**/**Samba** show it and HA **backups include it**. `/share` maps
+  identically in HA Core and every add-on, so the integration's panel reads the
+  same gallery the engine writes.
+- **`/data/`** — raw per-node recordings and the downloaded ASR/speaker
+  models. Large, regenerable, not worth backing up, so they stay out of
+  `/share` to keep the File Editor uncluttered and backups small.
+
+Upgrading from a pre-3.4 version auto-migrates your enrolled voices from the
+old `/data/voicebm` (and pre-3.8 `/config/voicebm`) location into
+`/share/voicebm` on first start (a `.migrated` marker prevents it repeating), so
+nothing is lost.
+
+## Data persistence
+
+Recordings, embeddings, the enrollment gallery, `config.json`, and the
+downloaded ASR model(s) all live under this add-on's `/data` volume
+(engine data mapped from upstream's
+`/home/user/voicebm/{recordings,embeddings,enroll,meta,out,pending_active}`
+via symlinks created at container start; ASR models cache under
+`/data/wyoming-models`). Uninstalling and reinstalling the add-on with the
+same options will not lose your enrolled voices or re-download models
+unless you also delete the add-on's data.
+
+## Startup ordering
+
+Two s6-rc **oneshot** services run before any of VoiceBM's daemons:
+- `init-voicebm-config` — builds `config.json`, symlinks persistent storage,
+  fetches the speaker model.
+- `wait-mqtt` — blocks up to 30s until the configured broker accepts a TCP
+  connection (depends on `init-voicebm-config`, so config exists first).
+
+Every longrun declares both `base` and `wait-mqtt` as dependencies, which
+guarantees `config.json` exists and the broker has been waited-for before
+any daemon starts — without that, the daemons race ahead and come up against
+a missing config / unreachable `localhost` broker.
+
+Implementation note, since this bit twice during development: an s6-rc
+oneshot's `up` file is **not** a shell script — `s6-rc-compile` parses it
+with execline's text rules, so a multi-line bash body there fails outright.
+The actual init logic lives in separate executable files under
+`/etc/s6-overlay/scripts/`, and each `up` file contains just the path to
+one. (`/etc/cont-init.d` — the other obvious place — doesn't work here
+either: in this base image it runs *after* the s6-rc user bundle, so the
+daemons would still start first.)
+
+## HAOS privilege notes
+
+This add-on no longer requests `docker_api` or `host_network` — the ASR
+server that used to require the docker socket is now bundled in-process
+(see [Standalone STT](#standalone-stt-the-bundled-transcriber-internal-mode)),
+so there's nothing elevated to grant. Default AppArmor confinement applies and
+hasn't needed loosening for anything here (ffmpeg's RTSP sockets and outbound
+MQTT/HTTP both fall inside the generated profile). If you hit an AppArmor denial
+in the log for something add-on-specific, the escape hatch is `apparmor: false`
+in `config.yaml`, at the cost of confinement.
+
+## Known limitations of this packaging
+
+- **Passive VAD and Emote (SER) are opt-in at build time.** By default the
+  image builds *without* the torch / silero-vad stack (needed for the
+  passive VAD filter) or the funasr / transformers stack (needed for Emote).
+  This keeps the default build small and reliable — Active (voice-assistant
+  STT + speaker identity) needs neither. If you enable the `passive` or
+  `emote` component in options *without* having built those stacks in, the
+  affected service idles with a log message telling you to rebuild; nothing
+  crash-loops. To include them, rebuild with the matching build arg
+  (`INCLUDE_PASSIVE_VAD=true` and/or `INCLUDE_EMOTE=true`). On a local
+  add-on that means adding them under `args:` — but note the deprecated
+  `build.yaml` path; the supported way now is to edit the `ARG` defaults at
+  the top of the `Dockerfile` to `"true"` before installing.
+- Emote's soft-import (`from voicebm_emote import ...`) resolves against
+  `/home/user/voicebm`, but `voicebm_emote.py` is vendored under `bin/`.
+  With Emote off (default) this is a harmless no-op; if you enable the emote
+  stack and want it actually active, you'd also need that module reachable
+  on the path.
+- `sherpa-onnx` and `onnx-asr` both ship manylinux (glibc) wheels for amd64
+  and aarch64 — verified against current PyPI, and the full default
+  dependency set was confirmed to resolve without conflict — which is why
+  this add-on builds on the Debian (not Alpine/musl) base. (This is also why
+  the biometrics can't run inside HA Core's Alpine environment, and hence why
+  the engine is a separate add-on rather than part of the integration.)
+
+---
+
+# Advanced / standalone configurations
+
+**You do not need anything below for the default integration setup.** These
+sections cover running the engine as a standalone transcriber, tapping room-mic
+RTSP audio, automatic and hands-free enrollment, GPU acceleration, JARVIS-AIO,
+and the full options reference.
+
+## Standalone STT: the bundled transcriber (internal mode)
+
+In `stt.mode: internal`, VoiceBM transcribes speech itself instead of the
+integration doing it. Upstream VoiceBM's Active pipeline is designed against a
+*separately installed* Wyoming ONNX ASR container: you'd run
 [tboby/wyoming-onnx-asr](https://github.com/tboby/wyoming-onnx-asr)
 yourself, then upstream's `scripts/deploy_handler.sh` would `docker cp` a
 custom `handler.py` into it and restart it. That's two moving parts outside
@@ -118,53 +273,15 @@ Set the model under **Configuration → active**:
 
 The model downloads on first start into `/data/wyoming-models` (persistent
 — not re-downloaded on restart or add-on update). Size varies by model;
-the default is roughly 600MB–1GB.
-
-## Automatic enrollment (optional)
-
-By default, enrollment is manual: unrecognized voices land in the dashboard's
-Pending list and you name them. If you'd rather have the add-on enroll
-recurring speakers on its own, enable **Configuration → auto_enroll**.
-
-It does this *conservatively*, reusing VoiceBM's own clustering and the same
-enroll path the dashboard uses — so it behaves like a careful human, not a
-firehose:
-- It groups unrecognized utterances by voiceprint similarity (using
-  VoiceBM's own clustering), rather than enrolling every raw utterance —
-  otherwise every stranger, guest, or TV voice would become its own person.
-- It only auto-enrolls a cluster that has at least `min_samples` samples
-  (a real recurring speaker, not a one-off), is internally tight
-  (`min_cohesion`, average intra-cluster voiceprint similarity — guards
-  against a loose blob of different people being merged), and is **not**
-  already a likely match for someone you've enrolled (so it won't create a
-  duplicate identity).
-- New people are named `{name_prefix} N` (default "Speaker 1", "Speaker
-  2", …). Rename them any time from the dashboard or the Home Assistant
-  device — the voiceprint is what matters, the label is cosmetic.
-
-Options:
-- `auto_enroll.enabled` — master switch (default off).
-- `auto_enroll.min_samples` — how many clustered samples before a new
-  speaker is created (default 6). Lower = enrolls sooner but riskier.
-- `auto_enroll.min_cohesion` — 0–1 tightness gate (default 0.55). Raise it
-  if you see different people merged into one; lower it if real speakers
-  aren't being picked up.
-- `auto_enroll.interval_s` — how often it checks (default 300s).
-- `auto_enroll.name_prefix` — the auto-name prefix (default "Speaker").
-
-Honest caveats: this is unsupervised speaker enrollment, and it *will*
-sometimes enroll a house guest, or split one person across two IDs if their
-voice varies a lot (phone vs. across-the-room). It only ever operates on the
-Active pipeline's pending voices, so it needs the `active` component on.
-Treat it as a convenience that gets you 80% there, then tidy names/merges in
-the dashboard. Start with it off, watch what the manual Pending list catches
-for a day, then enable it once you trust the clustering on your household.
+the default is roughly 600MB–1GB. In the default integration mode the bundled
+ASR never runs, so nothing is pre-baked into the image.
 
 ## Using your existing HAOS Whisper (external STT mode)
 
-By default VoiceBM transcribes speech itself (`stt.mode: internal`). If you
-already run a **Whisper** add-on on HAOS and don't want a second transcriber,
-switch to `stt.mode: external_whisper`. In that mode:
+`stt.mode: external_whisper` is the standalone way to reuse an existing
+**Whisper** add-on without the integration. (The integration itself already
+transcribes through your Whisper, so if you're using the integration you don't
+need this mode.) In that mode:
 
 - **Whisper does all transcription** — VoiceBM stops transcribing entirely (its
   bundled ASR and STT bridge idle). One transcriber, no duplication.
@@ -177,11 +294,12 @@ switch to `stt.mode: external_whisper`. In that mode:
   `binary_sensor.<person>_voice`), for JARVIS / the Ollama prompt to consume.
 
 This is the right mode for a **Voice PE / ESPHome satellite** (no room mic to
-tap for the passive pipeline) when you want to reuse your existing Whisper.
+tap for the passive pipeline) when you want to reuse your existing Whisper
+*without* the integration.
 
 Options under `stt`:
-- `mode` — `internal` (VoiceBM transcribes) or `external_whisper` (proxy + your
-  Whisper). Default `internal`.
+- `mode` — `internal` (VoiceBM transcribes), `external_whisper` (proxy + your
+  Whisper), or `integration` (the default; the HA integration is the STT).
 - `whisper_uri` — the Whisper add-on's Wyoming address, e.g.
   `tcp://a0d7b954-whisper:10300` (the official Whisper add-on's hostname) or
   `tcp://<ip>:10300`. **Find your exact value** in the Whisper add-on (its
@@ -204,41 +322,58 @@ official Whisper add-on also uses 10300 — they don't collide because in
 external mode VoiceBM's 10300 ASR is idle, and the proxy reaches Whisper at
 `whisper_uri`. The proxy itself is on 10400 so it never clashes with either.
 
-## GPU acceleration (NVIDIA/CUDA)
+## RTSP audio nodes (Passive / Ambient)
 
-**The honest constraint first:** on *stock* Home Assistant OS, add-ons cannot
-use an NVIDIA GPU — the Supervisor doesn't expose the NVIDIA container runtime
-to add-ons. GPU works on a host built for it — specifically the
-[`haos-gpu-ai`](https://github.com/sam3gp8/haos-gpu-ai) image, which promotes
-`default-runtime: nvidia` at boot (via `gpu-autodetect`) so the NVIDIA runtime
-hook injects the GPU into any container that requests it.
+The Passive and Ambient pipelines listen to always-on room audio rather than
+voice-assistant utterances. A **node** is any device/process serving an RTSP
+audio stream — not a camera. You still need something producing that stream;
+VoiceBM just consumes it. Everything else — MQTT, speech-to-text, and speaker
+identity — runs inside this one container with nothing else to install.
 
-This add-on already matches that OS's **proven** GPU pattern: `full_access:
-true` plus `NVIDIA_VISIBLE_DEVICES=all` /
-`NVIDIA_DRIVER_CAPABILITIES=compute,utility` — the same approach as that
-image's bundled Ollama add-on. (It deliberately does *not* use a
-`/dev/nvidia*` `devices:` list, which would fail to start on the universal
-image's Intel/AMD hosts.) The env vars are what fire the runtime hook; the
-CUDA libraries come from the host's driver via the container toolkit.
+Define nodes under `nodes` (see the options reference below). Each needs
+`node_id` (lowercase, no spaces), `rtsp_url`, and `recorder_enabled` and/or
+`ambient_enabled`. Passive VAD and Ambient are opt-in at build time (see
+[Known limitations](#known-limitations-of-this-packaging)).
 
-To actually run on the GPU, two steps:
-1. **Build the image with `ENABLE_GPU=true`** (edit the `ARG ENABLE_GPU`
-   default at the top of the `Dockerfile` to `"true"`). This swaps the ASR
-   stack to `onnxruntime-gpu` (CUDA execution provider — the hot path) and,
-   if you enabled the passive-VAD/emote stacks, the CUDA build of torch.
-2. **Set `active.device: gpu`** (or `gpu-trt` for TensorRT) in options — this
-   flows straight to the bundled ASR server's provider selection.
+## Automatic enrollment (optional)
 
-A GPU image still runs CPU-only cleanly where no device is visible
-(onnxruntime falls back). Verify it's on the GPU: `nvidia-smi` on the host
-should show a python process holding VRAM once an utterance has been
-transcribed. If it doesn't, the runtime isn't injecting and it's silently on
-CPU.
+By default, enrollment is manual: unrecognized voices land in the Speakers
+panel's Pending list and you name them. If you'd rather have the add-on enroll
+recurring speakers on its own, enable **Configuration → auto_enroll**.
 
-**Baking this into the OS image:** the accompanying
-`haos-gpu-ai-voicebm-overlay/` folder drops VoiceBM into the `haos-gpu-ai`
-build so it's *pre-installed* under Local add-ons (seeded like Ollama), rather
-than copied in by hand. See that overlay's README.
+It does this *conservatively*, reusing VoiceBM's own clustering and the same
+enroll path the panel uses — so it behaves like a careful human, not a
+firehose:
+- It groups unrecognized utterances by voiceprint similarity (using
+  VoiceBM's own clustering), rather than enrolling every raw utterance —
+  otherwise every stranger, guest, or TV voice would become its own person.
+- It only auto-enrolls a cluster that has at least `min_samples` samples
+  (a real recurring speaker, not a one-off), is internally tight
+  (`min_cohesion`, average intra-cluster voiceprint similarity — guards
+  against a loose blob of different people being merged), and is **not**
+  already a likely match for someone you've enrolled (so it won't create a
+  duplicate identity).
+- New people are named `{name_prefix} N` (default "Speaker 1", "Speaker
+  2", …). Rename them any time from the panel or the Home Assistant
+  device — the voiceprint is what matters, the label is cosmetic.
+
+Options:
+- `auto_enroll.enabled` — master switch (default off).
+- `auto_enroll.min_samples` — how many clustered samples before a new
+  speaker is created (default 6). Lower = enrolls sooner but riskier.
+- `auto_enroll.min_cohesion` — 0–1 tightness gate (default 0.55). Raise it
+  if you see different people merged into one; lower it if real speakers
+  aren't being picked up.
+- `auto_enroll.interval_s` — how often it checks (default 300s).
+- `auto_enroll.name_prefix` — the auto-name prefix (default "Speaker").
+
+Honest caveats: this is unsupervised speaker enrollment, and it *will*
+sometimes enroll a house guest, or split one person across two IDs if their
+voice varies a lot (phone vs. across-the-room). It only ever operates on the
+Active pipeline's pending voices, so it needs the `active` component on.
+Treat it as a convenience that gets you 80% there, then tidy names/merges in
+the panel. Start with it off, watch what the manual Pending list catches
+for a day, then enable it once you trust the clustering on your household.
 
 ## JARVIS-AIO integration
 
@@ -282,16 +417,55 @@ automation:
 ```
 
 The bridge enrolls VoiceBM's newest pending voice under that name (via the
-same enroll path the dashboard uses), but only if that pending clip is fresh
+same enroll path the panel uses), but only if that pending clip is fresh
 (≤30s), so it can't mislabel an older clip. Result: voice profiles build
 themselves from ordinary conversation, under the *right* names, with no
-dashboard clicks.
+manual clicks.
 
 If you use JARVIS's labelled enrollment, leave VoiceBM's own `auto_enroll`
 **off** — otherwise both try to enroll and you'll get duplicate/"Speaker N"
 identities competing with JARVIS's correctly-named ones.
 
-## Options
+## GPU acceleration (NVIDIA/CUDA)
+
+**The honest constraint first:** on *stock* Home Assistant OS, add-ons cannot
+use an NVIDIA GPU — the Supervisor doesn't expose the NVIDIA container runtime
+to add-ons. GPU works on a host built for it — specifically the
+[`haos-gpu-ai`](https://github.com/sam3gp8/haos-gpu-ai) image, which promotes
+`default-runtime: nvidia` at boot (via `gpu-autodetect`) so the NVIDIA runtime
+hook injects the GPU into any container that requests it.
+
+This add-on already matches that OS's **proven** GPU pattern: `full_access:
+true` plus `NVIDIA_VISIBLE_DEVICES=all` /
+`NVIDIA_DRIVER_CAPABILITIES=compute,utility` — the same approach as that
+image's bundled Ollama add-on. (It deliberately does *not* use a
+`/dev/nvidia*` `devices:` list, which would fail to start on the universal
+image's Intel/AMD hosts.) The env vars are what fire the runtime hook; the
+CUDA libraries come from the host's driver via the container toolkit.
+
+To actually run on the GPU, two steps:
+1. **Build the image with `ENABLE_GPU=true`** (edit the `ARG ENABLE_GPU`
+   default at the top of the `Dockerfile` to `"true"`). This swaps the ASR
+   stack to `onnxruntime-gpu` (CUDA execution provider — the hot path) and,
+   if you enabled the passive-VAD/emote stacks, the CUDA build of torch.
+2. **Set `active.device: gpu`** (or `gpu-trt` for TensorRT) in options — this
+   flows straight to the bundled ASR server's provider selection.
+
+A GPU image still runs CPU-only cleanly where no device is visible
+(onnxruntime falls back). Verify it's on the GPU: `nvidia-smi` on the host
+should show a python process holding VRAM once an utterance has been
+transcribed. If it doesn't, the runtime isn't injecting and it's silently on
+CPU.
+
+Note that the bundled ASR (the main GPU consumer) idles in the default
+`integration` mode, so the GPU build mainly matters for `internal` mode.
+
+**Baking this into the OS image:** the accompanying
+`haos-gpu-ai-voicebm-overlay/` folder drops VoiceBM into the `haos-gpu-ai`
+build so it's *pre-installed* under Local add-ons (seeded like Ollama), rather
+than copied in by hand. See that overlay's README.
+
+## Full options reference
 
 - `network.public_host` — how other devices (Home Assistant) reach this
   add-on for the audio server (port 9090). Leave blank to auto-use the
@@ -305,123 +479,16 @@ identities competing with JARVIS's correctly-named ones.
 - `thresholds.*`, `voicebm.*` — same tunables as upstream's `config.json`
   (`gallery_max`, `active_lead_trim_ms`, `inject_identity`,
   `transcript_preferred`, match thresholds). These can also be changed live
-  from the dashboard or Home Assistant entities — the engine writes back to
+  from the Speakers panel or Home Assistant entities — the engine writes back to
   `config.json` directly, and that file lives on the add-on's persistent
-  `/data` volume, so it isn't reset by add-on restarts or updates.
-- `active.*` — which bundled ASR model(s) to run; see above.
+  storage, so it isn't reset by add-on restarts or updates.
+- `active.*` — which bundled ASR model(s) to run; see
+  [Standalone STT](#standalone-stt-the-bundled-transcriber-internal-mode).
+- `stt.*` — transcription mode and its parameters; see
+  [Using your existing HAOS Whisper](#using-your-existing-haos-whisper-external-stt-mode).
+- `auto_enroll.*` — automatic enrollment; see
+  [Automatic enrollment](#automatic-enrollment-optional).
+- `jarvis.*` — JARVIS-AIO hands-free enrollment bridge; see
+  [JARVIS-AIO integration](#jarvis-aio-integration).
 - `nodes` — list of RTSP audio sources. Each needs `node_id` (lowercase, no
   spaces), `rtsp_url`, and `recorder_enabled` and/or `ambient_enabled`.
-
-## Access: sidebar (Ingress), not a raw port
-
-The dashboard now runs behind **Home Assistant Ingress** — it appears in the
-HA sidebar as **VoiceBM**, authenticated by Home Assistant, with no open port
-to reach it. (A small built-in reverse proxy handles this so the upstream
-dashboard's absolute API paths keep working under the Ingress prefix, without
-modifying upstream code.) This matches how the other add-ons on this setup are
-accessed.
-
-The other three services stay on mapped ports because external tools need them
-directly:
-
-| Port | What |
-|---|---|
-| 8005 | STT Bridge — OpenAI-compatible `/v1/audio/transcriptions`, for OpenWebUI etc. |
-| 8000 | Raw WAV recordings (per-node segments) |
-| 9090 | Audio server — serves pending/enrollment clips back to Home Assistant |
-
-The dashboard's own port 5000 is unmapped by default (use the sidebar). If you
-want direct port access too, set `5000/tcp` to `5000` in the add-on's Network
-panel. The bundled ASR's Wyoming port (10300) stays loopback-only.
-
-Home Assistant still talks to VoiceBM entirely over MQTT — the **Voice
-Biometrics** device appears automatically under Settings → Devices & Services
-→ MQTT once the add-on is running.
-
-## Storage: browsable in the File Editor
-
-Persistent data is split by how useful it is to you:
-
-- **`/share/voicebm/`** — `config.json`, the enrollment gallery, embeddings,
-  metadata, the pending buffer, auto-enroll state. This is the stuff worth
-  seeing, editing, and backing up, so it lives under `/config` where the
-  **File Editor**/**Samba** show it and HA **backups include it** (same
-  convention as the other add-ons here).
-- **`/data/`** — raw per-node recordings and the downloaded ASR/speaker
-  models. Large, regenerable, not worth backing up, so they stay out of
-  `/config` to keep the File Editor uncluttered and backups small.
-
-Upgrading from a pre-3.4 version auto-migrates your enrolled voices from the
-old `/data/voicebm` location into `/share/voicebm` on first start (a
-`.migrated` marker prevents it repeating), so nothing is lost.
-
-## Startup ordering
-
-Two s6-rc **oneshot** services run before any of VoiceBM's daemons:
-- `init-voicebm-config` — builds `config.json`, symlinks persistent storage,
-  fetches the speaker model.
-- `wait-mqtt` — blocks up to 30s until the configured broker accepts a TCP
-  connection (depends on `init-voicebm-config`, so config exists first).
-
-Every longrun declares both `base` and `wait-mqtt` as dependencies, which
-guarantees `config.json` exists and the broker has been waited-for before
-any daemon starts — without that, the daemons race ahead and come up against
-a missing config / unreachable `localhost` broker.
-
-Implementation note, since this bit twice during development: an s6-rc
-oneshot's `up` file is **not** a shell script — `s6-rc-compile` parses it
-with execline's text rules, so a multi-line bash body there fails outright.
-The actual init logic lives in separate executable files under
-`/etc/s6-overlay/scripts/`, and each `up` file contains just the path to
-one. (`/etc/cont-init.d` — the other obvious place — doesn't work here
-either: in this base image it runs *after* the s6-rc user bundle, so the
-daemons would still start first.)
-
-## Data persistence
-
-Recordings, embeddings, the enrollment gallery, `config.json`, and the
-downloaded ASR model(s) all live under this add-on's `/data` volume
-(engine data mapped from upstream's
-`/home/user/voicebm/{recordings,embeddings,enroll,meta,out,pending_active}`
-via symlinks created at container start; ASR models cache under
-`/data/wyoming-models`). Uninstalling and reinstalling the add-on with the
-same options will not lose your enrolled voices or re-download models
-unless you also delete the add-on's data.
-
-## HAOS privilege notes
-
-This add-on no longer requests `docker_api` or `host_network` — the ASR
-server that used to require the docker socket is now bundled in-process
-(see above), so there's nothing elevated to grant. Default AppArmor
-confinement applies and hasn't needed loosening for anything here (ffmpeg's
-RTSP sockets and outbound MQTT/HTTP both fall inside the generated
-profile). If you hit an AppArmor denial in the log for something add-on-
-specific, the escape hatch is `apparmor: false` in `config.yaml`, at the
-cost of confinement.
-
-## Known limitations of this packaging
-
-- **Passive VAD and Emote (SER) are opt-in at build time.** By default the
-  image builds *without* the torch / silero-vad stack (needed for the
-  passive VAD filter) or the funasr / transformers stack (needed for Emote).
-  This keeps the default build small and reliable — Active (voice-assistant
-  STT + speaker identity) needs neither. If you enable the `passive` or
-  `emote` component in options *without* having built those stacks in, the
-  affected service idles with a log message telling you to rebuild; nothing
-  crash-loops. To include them, rebuild with the matching build arg
-  (`INCLUDE_PASSIVE_VAD=true` and/or `INCLUDE_EMOTE=true`). On a local
-  add-on that means adding them under `args:` — but note the deprecated
-  `build.yaml` path; the supported way now is to edit the `ARG` defaults at
-  the top of the `Dockerfile` to `"true"` before installing.
-- Emote's soft-import (`from voicebm_emote import ...`) resolves against
-  `/home/user/voicebm`, but `voicebm_emote.py` is vendored under `bin/`.
-  With Emote off (default) this is a harmless no-op; if you enable the emote
-  stack and want it actually active, you'd also need that module reachable
-  on the path.
-- The dashboard (port 5000) is not exposed via Ingress in this version —
-  it's a bare port on the host network. Works fine, just doesn't show up
-  inside the Home Assistant sidebar.
-- `sherpa-onnx` and `onnx-asr` both ship manylinux (glibc) wheels for amd64
-  and aarch64 — verified against current PyPI, and the full default
-  dependency set was confirmed to resolve without conflict — which is why
-  this add-on builds on the Debian (not Alpine/musl) base.
