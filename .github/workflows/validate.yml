@@ -1,0 +1,58 @@
+name: Validate
+
+# HACS default-store readiness: validates the integration manifest (hassfest)
+# and the HACS repository structure (hacs/action) on every push and PR, plus a
+# weekly run to catch drift in the upstream validators.
+#
+# The HACS "brands" check is intentionally ignored: it requires the `voicebm`
+# domain to exist in home-assistant/brands, which is a separate submission (see
+# DIRECTION.md). Everything else HACS requires for the default store is checked
+# here and must stay green.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hassfest:
+    name: Hassfest (integration manifest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Hassfest validation
+        # pinned to a commit (was floating @master); bump when updating
+        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: HACS validation
+        # pinned to v22.5.0 (was floating @main)
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a
+        with:
+          category: integration
+          # `voicebm` is not yet in home-assistant/brands — track that submission
+          # separately (DIRECTION.md). Remove this once the brand is accepted.
+          ignore: brands
+
+  frontend:
+    name: Frontend (panel syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+      - name: Panel syntax check
+        run: node --check custom_components/voicebm/frontend/voicebm-panel.js

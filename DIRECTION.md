@@ -83,24 +83,37 @@ of identity, and the add-on's standalone modes are untouched.
 
 ## Roadmap / next steps
 
-Ordered roughly by value-to-effort, not committed to dates:
+Done since this direction was set:
 
-1. **Trim the add-on `DOCS.md` for integration-first.** It still reads as a
-   standalone-engine manual (its own dashboard, GPU, JARVIS, nodes). Lead it
-   with the integration-mode role; move the standalone-mode material into a
-   clearly-marked "standalone / advanced" section.
-2. **Repairs-panel install guidance.** The integration already raises a Repairs
-   issue when the engine add-on is missing (`engine.py`). Make that issue link
-   straight to the add-on install steps so the happy path is discoverable from
-   inside HA.
-3. **HACS default-store readiness.** As a custom repository the integration
-   works today. If we want the default HACS store later, the integration needs
-   the usual hygiene (brands entry, `hassfest`/HACS validation in CI, a tagged
-   release per change). Track separately.
-4. **Consider retiring the add-on's Ingress panel in integration mode.** It
-   already idles there; hiding the sidebar entry in that mode would remove a
-   confusing duplicate of the native **VoiceBM Speakers** panel. This is a
-   behavior change — do it deliberately, with a migration note, not casually.
+- ✅ **Trimmed the add-on `DOCS.md` for integration-first** — leads with the
+  integration-mode role; standalone STT modes, RTSP nodes, auto-enroll,
+  JARVIS-AIO, and GPU moved into a marked "Advanced / standalone" section.
+- ✅ **Repairs-panel install guidance** — the engine-missing Repairs issue's
+  "Learn more" now deep-links to the README install steps (`engine.py`).
+- ✅ **Retired the add-on's Ingress panel in integration mode** — the add-on
+  hides its own sidebar entry in `integration` mode (engine add-on 3.11.0),
+  shown again in the standalone modes.
+- ✅ **Release automation** — `.github/workflows/release.yml` publishes a
+  GitHub Release when the integration manifest version lands on `main`, keyed
+  off `CHANGELOG.md`.
+
+Remaining:
+
+1. **HACS default-store submission.** In-repo readiness is done: `hassfest` +
+   `hacs/action` run in CI (`.github/workflows/validate.yml`), `hacs.json`
+   carries the required `name`, the manifest keys are hassfest-ordered, and
+   there are tagged releases. Two external steps remain, neither of which can
+   be done from inside this repo:
+   - **Brands.** The `voicebm` domain must be added to
+     [home-assistant/brands](https://github.com/home-assistant/brands) (a
+     256×256 `icon.png` + 512×512 `logo.png` submitted there) — that's why the
+     CI HACS check currently ignores `brands`. Needs real VoiceBM brand art and
+     a PR to their repo; remove the `ignore: brands` line in `validate.yml` once
+     accepted.
+   - **Default-store listing.** Submit the repo to
+     [hacs/default](https://github.com/hacs/default) once brands lands and the
+     validation is fully green (no ignored checks). Until then, users install it
+     as a custom repository, which works today.
 
 ## Non-goals
 
