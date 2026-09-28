@@ -1,4 +1,4 @@
-<!-- Release 1.0.1 · integration 1.0.1 · engine add-on 3.11.0 -->
+<!-- Release 1.0.2 · integration 1.0.2 · engine add-on 3.11.0 -->
 # voicebm-ha — the VoiceBM integration for Home Assistant
 
 **A Home Assistant integration that adds speaker identity to your voice

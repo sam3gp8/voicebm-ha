@@ -1,3 +1,17 @@
+## [1.0.2] — declare the hassio dependency; add validation CI
+
+**HACS default-store readiness: `hassfest` + HACS validation now run in CI, and the integration correctly declares the `hassio` dependency it was already using.**
+
+- The integration imports `homeassistant.components.hassio` (`AddonManager` /
+  `is_hassio`) to detect and manage the engine add-on, but the manifest never
+  declared it. Added `hassio` to `after_dependencies` — a soft dependency, so
+  non-Supervisor installs are unaffected while setup ordering is correct when
+  the Supervisor is present. (`hassfest` flagged this.)
+- New `.github/workflows/validate.yml`: `hassfest`, `hacs/action`
+  (`category: integration`), and a panel JS syntax check, on push / PR / weekly.
+  The HACS `brands` check is ignored pending the `home-assistant/brands`
+  submission (see `DIRECTION.md`); everything else is validated and green.
+
 ## [1.0.1] — integration-first direction
 
 **The repo now leads with the integration; the engine add-on is the engine it drives, and hides its idle sidebar panel in the default integration mode.**
