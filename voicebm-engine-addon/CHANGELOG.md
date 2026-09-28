@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.11.0 — hide the sidebar panel in integration mode
+- In `stt.mode: integration` (the default) the Flask dashboard and its Ingress
+  proxy already idle — the integration's native **VoiceBM Speakers** panel is
+  the UI — but the add-on's own sidebar entry stayed visible and pointed at that
+  dead endpoint. `init-voicebm-config` now sets the add-on's `ingress_panel`
+  over the Supervisor API on every start: hidden in `integration` mode, shown in
+  the `internal` / `external_whisper` standalone modes (where the dashboard
+  runs). It tracks the mode automatically, since the integration restarts the
+  add-on when it flips `stt.mode`.
+- Best-effort and non-fatal: the call is guarded so a Supervisor hiccup can't
+  abort boot, and the Ingress endpoint itself stays reachable from the add-on's
+  info page regardless — only the sidebar entry is toggled.
+
 ## 3.10.1 — integration-first naming
 - Metadata only, no behavior change. The add-on is now named **VoiceBM engine**
   (was "VoiceBM") with a description and sidebar title that identify it as the
