@@ -62,7 +62,12 @@ async def async_ensure_engine(hass: HomeAssistant) -> None:
                 is_fixable=False,
                 severity=ir.IssueSeverity.WARNING,
                 translation_key=ISSUE_ENGINE_MISSING,
-                learn_more_url="https://github.com/sam3gp8/voicebm-ha",
+                # Deep-link the issue's "Learn more" button straight to the
+                # engine add-on install steps, not the repo root.
+                learn_more_url=(
+                    "https://github.com/sam3gp8/voicebm-ha"
+                    "#2-the-engine-add-on-it-needs"
+                ),
             )
             return
 
