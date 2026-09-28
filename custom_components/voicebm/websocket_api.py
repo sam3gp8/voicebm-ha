@@ -84,6 +84,43 @@ def _read_enrolled(base: Path) -> list[dict]:
     return people
 
 
+def _read_samples(base: Path, pid: str) -> dict:
+    """Read a person's individual samples straight off disk.
+
+    Offline fallback for the engine round-trip: listing samples is read-only and
+    the data lives in enroll/<pid>/metadata.json, which HA Core sees directly.
+    Mirrors the shape the engine's sample_manager returns and the panel consumes
+    (event_id / enrolled_at / source); per-sample audio isn't offered here (the
+    panel doesn't use it).
+    """
+    display = pid.replace("_", " ").title()
+    if not pid or "/" in pid or ".." in pid:
+        return {"person_id": pid, "display_name": display, "samples": [], "offline": True}
+    person_dir = base / "enroll" / pid
+    meta_file = person_dir / "metadata.json"
+    out: list[dict] = []
+    if meta_file.is_file():
+        try:
+            meta = json.loads(meta_file.read_text())
+            display = meta.get("display_name", display)
+            for s in meta.get("samples", []):
+                eid = s.get("event_id") or Path(s.get("embedding", "")).stem
+                out.append(
+                    {
+                        "event_id": eid,
+                        "enrolled_at": s.get("enrolled_at", ""),
+                        "source": s.get("source", ""),
+                    }
+                )
+        except Exception:
+            pass
+    elif (person_dir / "embeddings").is_dir():
+        # metadata missing — fall back to the raw embedding files on disk
+        for f in sorted((person_dir / "embeddings").glob("*.txt")):
+            out.append({"event_id": f.stem, "enrolled_at": "", "source": ""})
+    return {"person_id": pid, "display_name": display, "samples": out, "offline": True}
+
+
 def _read_pending(base: Path) -> list[dict]:
     pending_file = base / "pending_active" / "pending.json"
     if not pending_file.is_file():
@@ -262,10 +299,13 @@ async def ws_list_samples(hass, connection, msg):
         )
         connection.send_result(msg["id"], data)
     except asyncio.TimeoutError:
-        connection.send_error(
-            msg["id"], "timeout",
-            "No response from the VoiceBM engine (is the add-on running?)",
-        )
+        # The engine didn't answer — most often it's mid-restart. Listing is
+        # read-only, so fall back to reading the samples off disk instead of
+        # erroring; the panel shows them either way. (Deleting still needs the
+        # engine and will surface its own timeout if it's down.)
+        base = _gallery_dir(hass)
+        data = await hass.async_add_executor_job(_read_samples, base, pid)
+        connection.send_result(msg["id"], data)
 
 
 @websocket_api.websocket_command(

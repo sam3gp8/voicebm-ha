@@ -87,13 +87,21 @@ async def async_ensure_engine(hass: HomeAssistant) -> None:
             )
             await manager.async_set_addon_options(opts)
 
-        if info.state == AddonState.RUNNING:
-            if needs_mode:
-                _LOGGER.info("Restarting engine add-on to apply integration mode")
-                await manager.async_restart_addon()
-        else:
+        if info.state != AddonState.RUNNING:
             _LOGGER.info("Starting VoiceBM engine add-on")
             await manager.async_start_addon()
+        elif needs_mode:
+            # The add-on is already running and we just set stt.mode=integration
+            # above. Deliberately do NOT restart it: the identity service runs
+            # regardless of stt.mode, so identity keeps working, and restarting a
+            # running add-on out from under the user mid-session interrupts the
+            # Speakers panel's engine round-trips (a Samples/enroll click during
+            # the ~30-60s restart window times out). The option change takes
+            # effect on the add-on's next natural restart.
+            _LOGGER.info(
+                "Set VoiceBM engine stt.mode=integration; it applies on the "
+                "add-on's next restart (not restarting the running add-on)."
+            )
 
     except Exception as err:  # noqa: BLE001 — best-effort by design
         _LOGGER.warning(
