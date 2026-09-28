@@ -23,7 +23,7 @@ custom/community add-ons. Two ways to get the folder onto your HAOS box:
 3. Copy this repo's `voicebm/` folder in as-is — you should end up with
    `addons/voicebm/config.yaml` etc. directly under the share.
 4. In Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ (top right)
-   → Check for updates**. VoiceBM appears under **Local add-ons**.
+   → Check for updates**. **VoiceBM engine** appears under **Local add-ons**.
 
 **Option B — SSH & Web Terminal add-on** (if you're comfortable with git):
 1. Install the official **Terminal & SSH** add-on and connect.
