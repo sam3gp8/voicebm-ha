@@ -1,3 +1,14 @@
+## [1.0.4] — stop the spurious "Removing unknown panel voicebm" warning
+
+**Quiets a cosmetic WARNING the integration logged on every Home Assistant start.**
+
+- The Speakers panel registration removed any existing panel before
+  re-registering, but it did so unconditionally — so on a fresh start (when no
+  panel is registered yet) Home Assistant logged `Removing unknown panel
+  voicebm` at WARNING. It now only removes a panel that's actually registered
+  (the entry-reload case), so a clean start is silent. No functional change to
+  the panel.
+
 ## [1.0.3] — Speakers panel survives an engine restart
 
 **Fixes the "Couldn't load samples: No response from the VoiceBM engine" error that appeared when the engine add-on was mid-restart, and stops the integration from causing those restarts.**
