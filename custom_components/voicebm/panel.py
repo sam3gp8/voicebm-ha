@@ -62,10 +62,15 @@ async def async_register_panel(hass: HomeAssistant) -> bool:
     # Hash the JS off-loop (blocking file read must not run in the event loop).
     cache_bust = await hass.async_add_executor_job(_hash_file_sync, js_path)
     module_url = f"{PANEL_STATIC_URL}/{PANEL_JS_FILENAME}?v={cache_bust}"
-    try:
-        frontend.async_remove_panel(hass, PANEL_URL_PATH)
-    except Exception:
-        pass
+    # Only remove an already-registered panel (entry reload). Calling
+    # async_remove_panel for a panel that isn't registered makes HA log a
+    # spurious "Removing unknown panel voicebm" WARNING on every fresh start.
+    _panels = hass.data.get(getattr(frontend, "DATA_PANELS", "frontend_panels"), {})
+    if PANEL_URL_PATH in _panels:
+        try:
+            frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        except Exception:
+            pass
     try:
         await panel_custom.async_register_panel(
             hass,
@@ -87,6 +92,9 @@ async def async_register_panel(hass: HomeAssistant) -> bool:
 
 
 def async_unregister_panel(hass: HomeAssistant) -> None:
+    _panels = hass.data.get(getattr(frontend, "DATA_PANELS", "frontend_panels"), {})
+    if PANEL_URL_PATH not in _panels:
+        return
     try:
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
     except Exception:
